@@ -3,153 +3,156 @@ import { task } from "hardhat/config";
 import type { TaskArguments } from "hardhat/types";
 
 /**
- * Tutorial: Deploy and Interact with FHEBlog Locally (--network localhost)
- * ===================================================================
+ * Tutorial: Deploy and Interact with Encrypted Canvas Locally (--network localhost)
+ * =================================================================================
  *
  * 1. From a separate terminal window:
  *
  *   npx hardhat node
  *
- * 2. Deploy the FHEBlog contract
+ * 2. Deploy the EncryptedCanvas contract
  *
  *   npx hardhat --network localhost deploy
  *
- * 3. Interact with the FHEBlog contract
+ * 3. Interact with the EncryptedCanvas contract
  *
- *   npx hardhat --network localhost task:blog-address
- *   npx hardhat --network localhost task:create-blog --title "My First Blog" --content "Hello World!" --public true
- *   npx hardhat --network localhost task:list-blogs
- *   npx hardhat --network localhost task:decrypt-blog-content --blogid 0
- *   npx hardhat --network localhost task:like-blog --blogid 0
- *   npx hardhat --network localhost task:get-blog-likes --blogid 0
+ *   npx hardhat --network localhost task:canvas-address
+ *   npx hardhat --network localhost task:mint-creation --title "My First Creation" --content "Hello Creative World!" --exhibited true --tags "art,digital"
+ *   npx hardhat --network localhost task:list-creations
+ *   npx hardhat --network localhost task:decrypt-creation-content --creationid 0
+ *   npx hardhat --network localhost task:appreciate-creation --creationid 0
+ *   npx hardhat --network localhost task:get-creation-appreciations --creationid 0
  *
  */
 
 /**
  * Example:
- *   - npx hardhat --network localhost task:blog-address
- *   - npx hardhat --network sepolia task:blog-address
+ *   - npx hardhat --network localhost task:canvas-address
+ *   - npx hardhat --network sepolia task:canvas-address
  */
-task("task:blog-address", "Prints the FHEBlog address").setAction(async function (_taskArguments: TaskArguments, hre) {
+task("task:canvas-address", "Prints the EncryptedCanvas address").setAction(async function (_taskArguments: TaskArguments, hre) {
   const { deployments } = hre;
 
-  const fheBlog = await deployments.get("FHEBlog");
+  const encryptedCanvas = await deployments.get("EncryptedCanvas");
 
-  console.log("FHEBlog address is " + fheBlog.address);
+  console.log("EncryptedCanvas address is " + encryptedCanvas.address);
 });
 
 /**
  * Example:
- *   - npx hardhat --network localhost task:create-blog --title "My Blog" --content "Content" --public true
- *   - npx hardhat --network sepolia task:create-blog --title "My Blog" --content "Content" --public false
+ *   - npx hardhat --network localhost task:mint-creation --title "My Creation" --content "Content" --exhibited true --tags "art,digital"
+ *   - npx hardhat --network sepolia task:mint-creation --title "My Creation" --content "Content" --exhibited false --tags "poetry,modern"
  */
-task("task:create-blog", "Creates a new blog post")
-  .addOptionalParam("address", "Optionally specify the FHEBlog contract address")
-  .addParam("title", "The blog title")
-  .addParam("content", "The blog content")
-  .addParam("public", "Whether the blog is public (true/false)")
+task("task:mint-creation", "Creates a new creative work")
+  .addOptionalParam("address", "Optionally specify the EncryptedCanvas contract address")
+  .addParam("title", "The creation title")
+  .addParam("content", "The creation content")
+  .addParam("exhibited", "Whether the creation is publicly exhibited (true/false)")
+  .addParam("tags", "Comma-separated tags for the creation")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments, fhevm } = hre;
 
     const title = taskArguments.title;
     const content = taskArguments.content;
-    const isPublic = taskArguments.public === "true";
+    const isExhibited = taskArguments.exhibited === "true";
+    const tags = taskArguments.tags.split(',').map((tag: string) => tag.trim());
 
     await fhevm.initializeCLIApi();
 
-    const FHEBlogDeployment = taskArguments.address
+    const EncryptedCanvasDeployment = taskArguments.address
       ? { address: taskArguments.address }
-      : await deployments.get("FHEBlog");
-    console.log(`FHEBlog: ${FHEBlogDeployment.address}`);
+      : await deployments.get("EncryptedCanvas");
+    console.log(`EncryptedCanvas: ${EncryptedCanvasDeployment.address}`);
 
     const signers = await ethers.getSigners();
-    const fheBlogContract = await ethers.getContractAt("FHEBlog", FHEBlogDeployment.address);
+    const encryptedCanvasContract = await ethers.getContractAt("EncryptedCanvas", EncryptedCanvasDeployment.address);
 
     // Convert content string to uint256 (for simplicity, we'll use the string length as encrypted value)
     const contentValue = BigInt(content.length);
 
     // Encrypt the content
     const encryptedContent = await fhevm
-      .createEncryptedInput(FHEBlogDeployment.address, signers[0].address)
+      .createEncryptedInput(EncryptedCanvasDeployment.address, signers[0].address)
       .add256(contentValue)
       .encrypt();
 
-    const tx = await fheBlogContract
+    const tx = await encryptedCanvasContract
       .connect(signers[0])
-      .createBlog(title, encryptedContent.handles[0], encryptedContent.inputProof, isPublic);
+      .mintCreation(title, encryptedContent.handles[0], encryptedContent.inputProof, isExhibited, tags);
     console.log(`Wait for tx:${tx.hash}...`);
 
     const receipt = await tx.wait();
     console.log(`tx:${tx.hash} status=${receipt?.status}`);
 
-    console.log(`Blog "${title}" created successfully!`);
+    console.log(`Creation "${title}" minted successfully with tags: ${tags.join(', ')}!`);
   });
 
 /**
  * Example:
- *   - npx hardhat --network localhost task:list-blogs
- *   - npx hardhat --network sepolia task:list-blogs
+ *   - npx hardhat --network localhost task:list-creations
+ *   - npx hardhat --network sepolia task:list-creations
  */
-task("task:list-blogs", "Lists all blog posts")
-  .addOptionalParam("address", "Optionally specify the FHEBlog contract address")
+task("task:list-creations", "Lists all creative works")
+  .addOptionalParam("address", "Optionally specify the EncryptedCanvas contract address")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments } = hre;
 
-    const FHEBlogDeployment = taskArguments.address
+    const EncryptedCanvasDeployment = taskArguments.address
       ? { address: taskArguments.address }
-      : await deployments.get("FHEBlog");
-    console.log(`FHEBlog: ${FHEBlogDeployment.address}`);
+      : await deployments.get("EncryptedCanvas");
+    console.log(`EncryptedCanvas: ${EncryptedCanvasDeployment.address}`);
 
-    const fheBlogContract = await ethers.getContractAt("FHEBlog", FHEBlogDeployment.address);
+    const encryptedCanvasContract = await ethers.getContractAt("EncryptedCanvas", EncryptedCanvasDeployment.address);
 
-    const totalBlogs = await fheBlogContract.getTotalBlogs();
-    console.log(`Total blogs: ${totalBlogs}`);
+    const totalCreations = await encryptedCanvasContract.getTotalCreations();
+    console.log(`Total creations: ${totalCreations}`);
 
-    for (let i = 0; i < totalBlogs; i++) {
+    for (let i = 0; i < totalCreations; i++) {
       try {
-        const [title, author, createdAt, isPublic] = await fheBlogContract.getBlog(i);
-        const createdDate = new Date(Number(createdAt) * 1000).toISOString();
-        console.log(`Blog ${i}: "${title}" by ${author} at ${createdDate} (${isPublic ? 'Public' : 'Private'})`);
+        const [title, creator, mintedAt, isExhibited, tags, isPremium] = await encryptedCanvasContract.getCreation(i);
+        const mintedDate = new Date(Number(mintedAt) * 1000).toISOString();
+        const premiumBadge = isPremium ? ' [PREMIUM]' : '';
+        console.log(`Creation ${i}: "${title}" by ${creator} at ${mintedDate} (${isExhibited ? 'Exhibited' : 'Private'}) tags: [${tags.join(', ')}]${premiumBadge}`);
       } catch (error) {
-        console.log(`Blog ${i}: Error reading blog data`);
+        console.log(`Creation ${i}: Error reading creation data`);
       }
     }
   });
 
 /**
  * Example:
- *   - npx hardhat --network localhost task:decrypt-blog-content --blogid 0
- *   - npx hardhat --network sepolia task:decrypt-blog-content --blogid 0
+ *   - npx hardhat --network localhost task:decrypt-creation-content --creationid 0
+ *   - npx hardhat --network sepolia task:decrypt-creation-content --creationid 0
  */
-task("task:decrypt-blog-content", "Decrypts blog content")
-  .addOptionalParam("address", "Optionally specify the FHEBlog contract address")
-  .addParam("blogid", "The blog ID to decrypt")
+task("task:decrypt-creation-content", "Decrypts creation content")
+  .addOptionalParam("address", "Optionally specify the EncryptedCanvas contract address")
+  .addParam("creationid", "The creation ID to decrypt")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments, fhevm } = hre;
 
-    const blogId = parseInt(taskArguments.blogid);
-    if (!Number.isInteger(blogId)) {
-      throw new Error(`Argument --blogid is not an integer`);
+    const creationId = parseInt(taskArguments.creationid);
+    if (!Number.isInteger(creationId)) {
+      throw new Error(`Argument --creationid is not an integer`);
     }
 
     await fhevm.initializeCLIApi();
 
-    const FHEBlogDeployment = taskArguments.address
+    const EncryptedCanvasDeployment = taskArguments.address
       ? { address: taskArguments.address }
-      : await deployments.get("FHEBlog");
-    console.log(`FHEBlog: ${FHEBlogDeployment.address}`);
+      : await deployments.get("EncryptedCanvas");
+    console.log(`EncryptedCanvas: ${EncryptedCanvasDeployment.address}`);
 
     const signers = await ethers.getSigners();
-    const fheBlogContract = await ethers.getContractAt("FHEBlog", FHEBlogDeployment.address);
+    const encryptedCanvasContract = await ethers.getContractAt("EncryptedCanvas", EncryptedCanvasDeployment.address);
 
     try {
-      const encryptedContent = await fheBlogContract.getBlogContent(blogId);
+      const encryptedContent = await encryptedCanvasContract.getCreationContent(creationId);
 
       // For euint256, we get back the decrypted number
       const decryptedValue = await fhevm.userDecryptEuint(
         FhevmType.euint256,
         encryptedContent,
-        FHEBlogDeployment.address,
+        EncryptedCanvasDeployment.address,
         signers[0],
       );
 
@@ -158,7 +161,7 @@ task("task:decrypt-blog-content", "Decrypts blog content")
       const bytes: number[] = [];
 
       if (num === BigInt(0)) {
-        console.log(`Blog ${blogId} content: "(empty content)"`);
+        console.log(`Creation ${creationId} content: "(empty content)"`);
         return;
       }
 
@@ -171,88 +174,88 @@ task("task:decrypt-blog-content", "Decrypts blog content")
       const uint8Array = new Uint8Array(bytes);
       const decodedString = new TextDecoder().decode(uint8Array);
 
-      console.log(`Blog ${blogId} content: "${decodedString}"`);
+      console.log(`Creation ${creationId} content: "${decodedString}"`);
     } catch (error) {
-      console.log(`Failed to decrypt blog ${blogId} content:`, error.message);
+      console.log(`Failed to decrypt creation ${creationId} content:`, error.message);
     }
   });
 
 /**
  * Example:
- *   - npx hardhat --network localhost task:like-blog --blogid 0
- *   - npx hardhat --network sepolia task:like-blog --blogid 0
+ *   - npx hardhat --network localhost task:appreciate-creation --creationid 0
+ *   - npx hardhat --network sepolia task:appreciate-creation --creationid 0
  */
-task("task:like-blog", "Likes a blog post")
-  .addOptionalParam("address", "Optionally specify the FHEBlog contract address")
-  .addParam("blogid", "The blog ID to like")
+task("task:appreciate-creation", "Appreciates a creative work")
+  .addOptionalParam("address", "Optionally specify the EncryptedCanvas contract address")
+  .addParam("creationid", "The creation ID to appreciate")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments } = hre;
 
-    const blogId = parseInt(taskArguments.blogid);
-    if (!Number.isInteger(blogId)) {
-      throw new Error(`Argument --blogid is not an integer`);
+    const creationId = parseInt(taskArguments.creationid);
+    if (!Number.isInteger(creationId)) {
+      throw new Error(`Argument --creationid is not an integer`);
     }
 
-    const FHEBlogDeployment = taskArguments.address
+    const EncryptedCanvasDeployment = taskArguments.address
       ? { address: taskArguments.address }
-      : await deployments.get("FHEBlog");
-    console.log(`FHEBlog: ${FHEBlogDeployment.address}`);
+      : await deployments.get("EncryptedCanvas");
+    console.log(`EncryptedCanvas: ${EncryptedCanvasDeployment.address}`);
 
     const signers = await ethers.getSigners();
-    const fheBlogContract = await ethers.getContractAt("FHEBlog", FHEBlogDeployment.address);
+    const encryptedCanvasContract = await ethers.getContractAt("EncryptedCanvas", EncryptedCanvasDeployment.address);
 
-    const tx = await fheBlogContract
+    const tx = await encryptedCanvasContract
       .connect(signers[0])
-      .likeBlog(blogId);
+      .appreciateCreation(creationId);
     console.log(`Wait for tx:${tx.hash}...`);
 
     const receipt = await tx.wait();
     console.log(`tx:${tx.hash} status=${receipt?.status}`);
 
-    console.log(`Blog ${blogId} liked successfully!`);
+    console.log(`Creation ${creationId} appreciated successfully!`);
   });
 
 /**
  * Example:
- *   - npx hardhat --network localhost task:get-blog-likes --blogid 0
- *   - npx hardhat --network sepolia task:get-blog-likes --blogid 0
+ *   - npx hardhat --network localhost task:get-creation-appreciations --creationid 0
+ *   - npx hardhat --network sepolia task:get-creation-appreciations --creationid 0
  */
-task("task:get-blog-likes", "Gets blog like count")
-  .addOptionalParam("address", "Optionally specify the FHEBlog contract address")
-  .addParam("blogid", "The blog ID to get likes for")
+task("task:get-creation-appreciations", "Gets creation appreciation count")
+  .addOptionalParam("address", "Optionally specify the EncryptedCanvas contract address")
+  .addParam("creationid", "The creation ID to get appreciations for")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments, fhevm } = hre;
 
-    const blogId = parseInt(taskArguments.blogid);
-    if (!Number.isInteger(blogId)) {
-      throw new Error(`Argument --blogid is not an integer`);
+    const creationId = parseInt(taskArguments.creationid);
+    if (!Number.isInteger(creationId)) {
+      throw new Error(`Argument --creationid is not an integer`);
     }
 
     await fhevm.initializeCLIApi();
 
-    const FHEBlogDeployment = taskArguments.address
+    const EncryptedCanvasDeployment = taskArguments.address
       ? { address: taskArguments.address }
-      : await deployments.get("FHEBlog");
-    console.log(`FHEBlog: ${FHEBlogDeployment.address}`);
+      : await deployments.get("EncryptedCanvas");
+    console.log(`EncryptedCanvas: ${EncryptedCanvasDeployment.address}`);
 
     const signers = await ethers.getSigners();
-    const fheBlogContract = await ethers.getContractAt("FHEBlog", FHEBlogDeployment.address);
+    const encryptedCanvasContract = await ethers.getContractAt("EncryptedCanvas", EncryptedCanvasDeployment.address);
 
     try {
-      const encryptedLikes = await fheBlogContract.getLikeCount(blogId);
+      const encryptedAppreciations = await encryptedCanvasContract.getAppreciationCount(creationId);
 
-      const clearLikes = await fhevm.userDecryptEuint(
+      const clearAppreciations = await fhevm.userDecryptEuint(
         FhevmType.euint32,
-        encryptedLikes,
-        FHEBlogDeployment.address,
+        encryptedAppreciations,
+        EncryptedCanvasDeployment.address,
         signers[0],
       );
 
-      const hasLiked = await fheBlogContract.hasLiked(blogId, signers[0].address);
+      const hasAppreciated = await encryptedCanvasContract.hasAppreciated(creationId, signers[0].address);
 
-      console.log(`Blog ${blogId} has ${clearLikes} likes`);
-      console.log(`You have ${hasLiked ? '' : 'not '}liked this blog`);
+      console.log(`Creation ${creationId} has ${clearAppreciations} appreciations`);
+      console.log(`You have ${hasAppreciated ? '' : 'not '}appreciated this creation`);
     } catch (error) {
-      console.log(`Failed to get blog ${blogId} likes:`, error.message);
+      console.log(`Failed to get creation ${creationId} appreciations:`, error.message);
     }
   });

@@ -1,6 +1,6 @@
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { ethers, fhevm } from "hardhat";
-import { FHECounter, FHECounter__factory } from "../types";
+import { PrivacyLedger, PrivacyLedger__factory } from "../types";
 import { expect } from "chai";
 import { FhevmType } from "@fhevm/hardhat-plugin";
 
@@ -11,17 +11,17 @@ type Signers = {
 };
 
 async function deployFixture() {
-  const factory = (await ethers.getContractFactory("FHECounter")) as FHECounter__factory;
-  const fheCounterContract = (await factory.deploy()) as FHECounter;
-  const fheCounterContractAddress = await fheCounterContract.getAddress();
+  const factory = (await ethers.getContractFactory("PrivacyLedger")) as PrivacyLedger__factory;
+  const privacyLedgerContract = (await factory.deploy()) as PrivacyLedger;
+  const privacyLedgerContractAddress = await privacyLedgerContract.getAddress();
 
-  return { fheCounterContract, fheCounterContractAddress };
+  return { privacyLedgerContract, privacyLedgerContractAddress };
 }
 
-describe("FHECounter", function () {
+describe("PrivacyLedger", function () {
   let signers: Signers;
-  let fheCounterContract: FHECounter;
-  let fheCounterContractAddress: string;
+  let privacyLedgerContract: PrivacyLedger;
+  let privacyLedgerContractAddress: string;
 
   before(async function () {
     const ethSigners: HardhatEthersSigner[] = await ethers.getSigners();
@@ -35,70 +35,70 @@ describe("FHECounter", function () {
       this.skip();
     }
 
-    ({ fheCounterContract, fheCounterContractAddress } = await deployFixture());
+    ({ privacyLedgerContract, privacyLedgerContractAddress } = await deployFixture());
   });
 
-  it("encrypted count should be uninitialized after deployment", async function () {
-    const encryptedCount = await fheCounterContract.getCount();
-    // Expect initial count to be bytes32(0) after deployment,
-    // (meaning the encrypted count value is uninitialized)
-    expect(encryptedCount).to.eq(ethers.ZeroHash);
+  it("encrypted value should be uninitialized after deployment", async function () {
+    const encryptedValue = await privacyLedgerContract.getAccumulatedValue();
+    // Expect initial value to be bytes32(0) after deployment,
+    // (meaning the encrypted value is uninitialized)
+    expect(encryptedValue).to.eq(ethers.ZeroHash);
   });
 
-  it("increment the counter by 1", async function () {
-    const encryptedCountBeforeInc = await fheCounterContract.getCount();
-    expect(encryptedCountBeforeInc).to.eq(ethers.ZeroHash);
-    const clearCountBeforeInc = 0;
+  it("accumulate value by 1", async function () {
+    const encryptedValueBeforeAcc = await privacyLedgerContract.getAccumulatedValue();
+    expect(encryptedValueBeforeAcc).to.eq(ethers.ZeroHash);
+    const clearValueBeforeAcc = 0;
 
     // Encrypt constant 1 as a euint32
     const clearOne = 1;
     const encryptedOne = await fhevm
-      .createEncryptedInput(fheCounterContractAddress, signers.alice.address)
+      .createEncryptedInput(privacyLedgerContractAddress, signers.alice.address)
       .add32(clearOne)
       .encrypt();
 
-    const tx = await fheCounterContract
+    const tx = await privacyLedgerContract
       .connect(signers.alice)
-      .increment(encryptedOne.handles[0], encryptedOne.inputProof);
+      .accumulateValue(encryptedOne.handles[0], encryptedOne.inputProof);
     await tx.wait();
 
-    const encryptedCountAfterInc = await fheCounterContract.getCount();
-    const clearCountAfterInc = await fhevm.userDecryptEuint(
+    const encryptedValueAfterAcc = await privacyLedgerContract.getAccumulatedValue();
+    const clearValueAfterAcc = await fhevm.userDecryptEuint(
       FhevmType.euint32,
-      encryptedCountAfterInc,
-      fheCounterContractAddress,
+      encryptedValueAfterAcc,
+      privacyLedgerContractAddress,
       signers.alice,
     );
 
-    expect(clearCountAfterInc).to.eq(clearCountBeforeInc + clearOne);
+    expect(clearValueAfterAcc).to.eq(clearValueBeforeAcc + clearOne);
   });
 
-  it("decrement the counter by 1", async function () {
+  it("diminish value by 1", async function () {
     // Encrypt constant 1 as a euint32
     const clearOne = 1;
     const encryptedOne = await fhevm
-      .createEncryptedInput(fheCounterContractAddress, signers.alice.address)
+      .createEncryptedInput(privacyLedgerContractAddress, signers.alice.address)
       .add32(clearOne)
       .encrypt();
 
-    // First increment by 1, count becomes 1
-    let tx = await fheCounterContract
+    // First accumulate by 1, value becomes 1
+    let tx = await privacyLedgerContract
       .connect(signers.alice)
-      .increment(encryptedOne.handles[0], encryptedOne.inputProof);
+      .accumulateValue(encryptedOne.handles[0], encryptedOne.inputProof);
     await tx.wait();
 
-    // Then decrement by 1, count goes back to 0
-    tx = await fheCounterContract.connect(signers.alice).decrement(encryptedOne.handles[0], encryptedOne.inputProof);
+    // Then diminish by 1, value goes back to 0
+    tx = await privacyLedgerContract.connect(signers.alice).diminishValue(encryptedOne.handles[0], encryptedOne.inputProof);
     await tx.wait();
 
-    const encryptedCountAfterDec = await fheCounterContract.getCount();
-    const clearCountAfterInc = await fhevm.userDecryptEuint(
+    const encryptedValueAfterDim = await privacyLedgerContract.getAccumulatedValue();
+    const clearValueAfterDim = await fhevm.userDecryptEuint(
       FhevmType.euint32,
-      encryptedCountAfterDec,
-      fheCounterContractAddress,
+      encryptedValueAfterDim,
+      privacyLedgerContractAddress,
       signers.alice,
     );
 
-    expect(clearCountAfterInc).to.eq(0);
+    expect(clearValueAfterDim).to.eq(0);
   });
 });
